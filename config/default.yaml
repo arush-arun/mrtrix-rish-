@@ -1,0 +1,25 @@
+# mrtrix-rish default configuration
+# Copy and modify for your study
+
+harmonization:
+  lmax: 8                     # Maximum SH order (4, 6, or 8)
+  mask_threshold: 0.1         # Minimum signal for brain mask
+  smoothing_fwhm: 3.0         # Gaussian smoothing for scale maps (mm)
+  clip_range: [0.5, 2.0]      # Min/max scale factors
+  n_threads: 4                # Number of processing threads
+  save_intermediate: false    # Keep intermediate files
+  compress_output: true       # Compress output files
+
+registration:
+  method: mrtrix              # Registration method: "mrtrix" or "ants"
+  template: population        # "population" or path to external template
+  linear_type: affine         # Linear transform type
+  nonlinear: true             # Use nonlinear registration
+
+qc:
+  generate_report: true       # Generate HTML QC report
+  metrics:
+    - fa_diff                 # FA difference before/after
+    - md_diff                 # MD difference before/after  
+    - angular_correlation     # FOD angular correlation
+  save_figures: true          # Save QC figures

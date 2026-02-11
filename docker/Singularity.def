@@ -1,0 +1,70 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%labels
+    Author Arush
+    Version 0.1.0
+    Description MRtrix3-native RISH harmonization pipeline
+
+%post
+    # Update and install dependencies
+    apt-get update && apt-get install -y \
+        python3 \
+        python3-pip \
+        python3-venv \
+        git \
+        wget \
+        curl \
+        ca-certificates \
+        libeigen3-dev \
+        zlib1g-dev \
+        libqt5opengl5-dev \
+        libqt5svg5-dev \
+        libgl1-mesa-dev \
+        libfftw3-dev \
+        libtiff5-dev \
+        libpng-dev
+
+    # Install MRtrix3 via conda
+    curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj bin/micromamba
+    export MAMBA_ROOT_PREFIX=/opt/micromamba
+    /bin/micromamba create -n mrtrix -c conda-forge mrtrix3 python=3.11 -y
+
+    # Clean up
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+
+%environment
+    export MAMBA_ROOT_PREFIX=/opt/micromamba
+    export PATH=/opt/micromamba/envs/mrtrix/bin:$PATH
+
+%files
+    ../pyproject.toml /app/pyproject.toml
+    ../README.md /app/README.md
+    ../src /app/src
+    ../config /app/config
+
+%post
+    cd /app
+    /opt/micromamba/envs/mrtrix/bin/pip install -e ".[qc]"
+
+%runscript
+    exec mrtrix-rish "$@"
+
+%help
+    MRtrix3-native RISH Harmonization Pipeline
+
+    Usage:
+        singularity run mrtrix-rish.sif [command] [options]
+    
+    Commands:
+        create-template    Create RISH template from reference site
+        harmonize         Harmonize target data using template
+        extract-rish      Extract RISH features from SH image
+        qc                Generate QC report
+    
+    Example:
+        singularity run mrtrix-rish.sif harmonize \
+            --target data/sub-01_sh.mif \
+            --template template/ \
+            --output harmonized/

@@ -1,0 +1,4 @@
+# Subject list for RISH harmonization pipeline
+# One subject per line
+sub-002
+sub-003
