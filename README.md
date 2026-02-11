@@ -6,7 +6,7 @@ A reproducible, open-source tool for multi-site diffusion MRI harmonization usin
 
 ## Why?
 
-Multi-site diffusion MRI studies suffer from scanner-induced variability. RISH harmonization operates at the spherical harmonics level, preserving angular (fiber orientation) information while removing site effects. Existing implementations (pnlbwh) rely on FSL/ANTs — this project provides a **pure MRtrix3 solution**.
+Multi-site diffusion MRI studies suffer from scanner-induced variability. RISH harmonization operates at the spherical harmonics level, preserving angular (fiber orientation) information while removing site effects. Existing implementations (pnlbwh) rely on FSL/ANTs — this project provides a **pure MRtrix3 workflow**.
 
 ## Features
 
@@ -15,7 +15,6 @@ Multi-site diffusion MRI studies suffer from scanner-induced variability. RISH h
 - 📊 **Built-in QC** — automatic quality reports
 - 📦 **BIDS-compatible** — works with standard neuroimaging data structures
 - 🐳 **Containerized** — Docker/Singularity for reproducibility
-- ⚡ **Multi-threaded** — leverages MRtrix3's performance
 
 ## Quick Start
 
