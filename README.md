@@ -50,7 +50,6 @@ mrtrix-rish harmonize --config config/harmonize.yaml
 ## Citation
 
 If you use this tool, please cite:
-- [TODO: Our paper]
 - Cetin Karayumak et al. (2019) - Original RISH method
 - Tournier et al. (2019) - MRtrix3
 
