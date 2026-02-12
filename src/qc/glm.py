@@ -896,38 +896,35 @@ def load_image_to_matrix(
     image_shape = None
 
     for i, path in enumerate(image_paths):
-        # Get shape from first image
-        if image_shape is None:
-            result = subprocess.run(
-                ["mrinfo", "-size", path],
-                capture_output=True, text=True, check=True
-            )
-            dims = [int(x) for x in result.stdout.strip().split()]
-            image_shape = tuple(dims[:3])
-
-        # Convert to raw
-        with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as tmp:
-            raw_path = tmp.name
+        # Convert to NIfTI temp file, then load with nibabel
+        with tempfile.NamedTemporaryFile(suffix=".nii", delete=False) as tmp:
+            nii_path = tmp.name
 
         subprocess.run(
-            ["mrconvert", path, raw_path, "-datatype", "float32", "-force"],
+            ["mrconvert", path, nii_path, "-datatype", "float32", "-force"],
             capture_output=True, check=True
         )
 
-        img_data = np.fromfile(raw_path, dtype=np.float32)
-        Path(raw_path).unlink()
+        import nibabel as nib
+        img = nib.load(nii_path)
+        img_data = np.asarray(img.dataobj, dtype=np.float32).ravel()
+        Path(nii_path).unlink()
+
+        if image_shape is None:
+            image_shape = img.shape[:3]
 
         # Apply mask on first iteration
         if mask_indices is None:
             if mask_path:
-                with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as tmp:
-                    mask_raw = tmp.name
+                with tempfile.NamedTemporaryFile(suffix=".nii", delete=False) as tmp:
+                    mask_nii = tmp.name
                 subprocess.run(
-                    ["mrconvert", mask_path, mask_raw, "-datatype", "float32", "-force"],
+                    ["mrconvert", mask_path, mask_nii, "-datatype", "float32", "-force"],
                     capture_output=True, check=True
                 )
-                mask_data = np.fromfile(mask_raw, dtype=np.float32)
-                Path(mask_raw).unlink()
+                mask_img = nib.load(mask_nii)
+                mask_data = np.asarray(mask_img.dataobj, dtype=np.float32).ravel()
+                Path(mask_nii).unlink()
                 mask_indices = np.where(mask_data > 0.5)[0]
             else:
                 mask_indices = np.arange(len(img_data))
@@ -966,30 +963,33 @@ def save_vector_to_image(
     str
         Path to saved image
     """
-    # Reconstruct volume
+    # Reconstruct volume and save via nibabel + mrconvert
+    import nibabel as nib
+
     full = np.full(np.prod(image_shape), fill_value, dtype=np.float32)
     full[mask_indices] = data.astype(np.float32)
+    vol = full.reshape(image_shape)
 
-    with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as tmp:
-        raw_path = tmp.name
-
-    full.tofile(raw_path)
-
-    # Get voxel spacing
-    result = subprocess.run(
-        ["mrinfo", "-spacing", reference_image],
-        capture_output=True, text=True, check=True
+    # Load reference for affine/header
+    with tempfile.NamedTemporaryFile(suffix=".nii", delete=False) as tmp:
+        ref_nii = tmp.name
+    subprocess.run(
+        ["mrconvert", reference_image, ref_nii, "-force"],
+        capture_output=True, check=True
     )
-    spacing = result.stdout.strip().replace(" ", ",")
+    ref_img = nib.load(ref_nii)
 
-    # Convert with header info
-    subprocess.run([
-        "mrconvert", raw_path, output_path,
-        "-size", ",".join(str(s) for s in image_shape),
-        "-voxel", spacing,
-        "-datatype", "float32",
-        "-force"
-    ], capture_output=True, check=True)
+    # Save as NIfTI with reference header
+    out_img = nib.Nifti1Image(vol, ref_img.affine, ref_img.header)
+    with tempfile.NamedTemporaryFile(suffix=".nii", delete=False) as tmp:
+        tmp_nii = tmp.name
+    nib.save(out_img, tmp_nii)
+    Path(ref_nii).unlink()
 
-    Path(raw_path).unlink()
+    # Convert to final format (supports .mif, .nii.gz, etc.)
+    subprocess.run(
+        ["mrconvert", tmp_nii, output_path, "-datatype", "float32", "-force"],
+        capture_output=True, check=True
+    )
+    Path(tmp_nii).unlink()
     return output_path

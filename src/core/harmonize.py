@@ -69,7 +69,7 @@ def harmonize_sh(
                 raise ValueError(f"No scale map for order {l}")
             
             scale_map = scale_maps[l]
-            vol_range = f"{start_idx}:{end_idx}"
+            vol_range = f"{start_idx}:{end_idx - 1}"
             
             # Extract coefficients for this order
             extracted = tmpdir / f"l{l}_coeffs.mif"

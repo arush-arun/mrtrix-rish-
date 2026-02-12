@@ -1,0 +1,8 @@
+2.0.2 2021-07-21
+  - Updating reference and reformatting metadata
+2.0.1 2021-03-01
+  - Updating dataset_description.json citation and fixing formatting for changelog.
+2.0.0 2021-03-01
+  - Split cohort III into cohorts III and IV to give pediatric subjects their own cohort (i.e., "cIIIsA00" -> "cIIIs00" and "cIIIsC000" -> "cIVs000").
+1.0.0 2020-12-03
+  - Initial Release
