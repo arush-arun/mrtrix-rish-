@@ -6,28 +6,32 @@ Load and save YAML configuration files.
 
 import yaml
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field, asdict
 
 
 @dataclass
 class HarmonizationConfig:
     """Configuration for RISH harmonization."""
-    
+
     # SH parameters
     lmax: int = 8
-    
+
     # Scale map parameters
     mask_threshold: float = 0.1
     smoothing_fwhm: float = 3.0
     clip_range: tuple = (0.5, 2.0)
-    
+
     # Processing
     n_threads: int = 4
-    
+
     # Output
     save_intermediate: bool = False
     compress_output: bool = True
+
+    # Covariate adjustment
+    covariates: List[str] = field(default_factory=list)
+    standardize_covariates: bool = True
 
 
 @dataclass 

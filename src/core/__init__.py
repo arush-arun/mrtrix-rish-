@@ -8,6 +8,14 @@ from .harmonize import harmonize_sh, RISHHarmonizer
 from .template import create_template
 from .fod import detect_shells, compute_fod, estimate_response, ShellType, ShellInfo
 from .bids_workflow import process_bids_dataset, process_bids_subject, harmonize_bids_sites
+from .covariates import (
+    CovariateModel,
+    fit_covariate_model,
+    adjust_rish_features,
+    adjust_rish_features_batch,
+    save_covariate_model,
+    load_covariate_model,
+)
 
 __all__ = [
     "extract_rish_features",
@@ -24,4 +32,10 @@ __all__ = [
     "process_bids_dataset",
     "process_bids_subject",
     "harmonize_bids_sites",
+    "CovariateModel",
+    "fit_covariate_model",
+    "adjust_rish_features",
+    "adjust_rish_features_batch",
+    "save_covariate_model",
+    "load_covariate_model",
 ]

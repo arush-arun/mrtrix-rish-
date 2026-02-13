@@ -62,7 +62,20 @@ def create_parser() -> argparse.ArgumentParser:
         default=4,
         help="Number of threads (default: 4)"
     )
-    
+    template_parser.add_argument(
+        "--participants",
+        help="Participants TSV/CSV with subject demographics"
+    )
+    template_parser.add_argument(
+        "--covariates",
+        help="Comma-separated covariate column names (e.g., age,sex)"
+    )
+    template_parser.add_argument(
+        "--subject-column",
+        default="participant_id",
+        help="Subject ID column name in participants file (default: participant_id)"
+    )
+
     # harmonize subcommand
     harm_parser = subparsers.add_parser(
         "harmonize",
@@ -103,7 +116,19 @@ def create_parser() -> argparse.ArgumentParser:
         default=4,
         help="Number of threads (default: 4)"
     )
-    
+    harm_parser.add_argument(
+        "--participants",
+        help="Participants TSV/CSV for target subject covariates"
+    )
+    harm_parser.add_argument(
+        "--subject-id",
+        help="Subject ID to look up in participants file"
+    )
+    harm_parser.add_argument(
+        "--subject-covariates",
+        help='Target subject covariates as key=value pairs (e.g., "age=35,sex=M")'
+    )
+
     # qc subcommand
     qc_parser = subparsers.add_parser(
         "qc",
@@ -313,28 +338,28 @@ def cmd_create_template(args):
     """Handle create-template command."""
     from ..core.rish_features import extract_rish_features
     from ..core.harmonize import run_mrtrix_cmd
-    
+
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Read subject lists
     with open(args.reference_list) as f:
         sh_images = [line.strip() for line in f if line.strip()]
-    
+
     masks = None
     if args.mask_list:
         with open(args.mask_list) as f:
             masks = [line.strip() for line in f if line.strip()]
-    
+
     print(f"Creating template from {len(sh_images)} subjects...")
-    
+
     # Extract RISH for each subject
     rish_list = []
     for i, sh_img in enumerate(sh_images):
         print(f"  Processing subject {i+1}/{len(sh_images)}...")
         mask = masks[i] if masks else None
         subj_dir = output_dir / "subjects" / f"sub-{i:03d}"
-        
+
         rish = extract_rish_features(
             sh_img,
             str(subj_dir),
@@ -343,15 +368,63 @@ def cmd_create_template(args):
             n_threads=args.nthreads
         )
         rish_list.append(rish)
-    
+
+    # Covariate adjustment (if participants + covariates provided)
+    rish_to_average = rish_list
+    if args.participants and args.covariates:
+        from ..io.participants import load_participants_tsv, load_participants_csv
+        from ..core.covariates import fit_covariate_model, adjust_rish_features_batch
+
+        cov_names = [c.strip() for c in args.covariates.split(",")]
+        subj_col = args.subject_column
+
+        # Auto-detect TSV vs CSV
+        if args.participants.endswith(".tsv"):
+            participants = load_participants_tsv(
+                args.participants, cov_names, subject_column=subj_col
+            )
+        else:
+            participants = load_participants_csv(
+                args.participants, cov_names, subject_column=subj_col
+            )
+
+        if participants.n_subjects != len(sh_images):
+            print(
+                f"Warning: {participants.n_subjects} participants vs "
+                f"{len(sh_images)} images. Ensure ordering matches."
+            )
+
+        print(f"  Fitting covariate model ({', '.join(cov_names)})...")
+
+        # Reorganize rish_list into {order: [sub0_path, sub1_path, ...]}
+        orders = sorted(rish_list[0].keys())
+        rish_by_order = {
+            l: [rish_list[i][l] for i in range(len(rish_list))]
+            for l in orders
+        }
+
+        # Use first mask for fitting (or None)
+        fit_mask = masks[0] if masks else None
+
+        model = fit_covariate_model(
+            rish_by_order, participants.covariates, fit_mask, str(output_dir)
+        )
+
+        print(f"  Adjusting RISH features for {len(sh_images)} subjects...")
+        adjusted_list = adjust_rish_features_batch(
+            rish_list, participants.covariates, model,
+            str(output_dir / "adjusted"), mask_path=fit_mask
+        )
+        rish_to_average = adjusted_list
+
     # Average RISH features
-    orders = list(rish_list[0].keys())
+    orders = list(rish_to_average[0].keys())
     print(f"Averaging RISH features across subjects...")
-    
+
     for l in orders:
-        images = [r[l] for r in rish_list]
+        images = [r[l] for r in rish_to_average]
         avg_output = output_dir / f"template_rish_l{l}.mif"
-        
+
         run_mrtrix_cmd([
             "mrmath", *images,
             "mean", str(avg_output),
@@ -359,7 +432,7 @@ def cmd_create_template(args):
             "-nthreads", str(args.nthreads)
         ])
         print(f"  Created {avg_output}")
-    
+
     print(f"✓ Template created in {output_dir}")
 
 
@@ -369,30 +442,30 @@ def cmd_harmonize(args):
     from ..core.scale_maps import compute_scale_maps
     from ..core.harmonize import harmonize_sh
     from ..io.config_io import load_config
-    
+
     # Load config if provided
     config = None
     if args.config:
         config = load_config(args.config)
-    
+
     template_dir = Path(args.template)
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Load template RISH features
     print("Loading template RISH features...")
     template_rish = {}
     for rish_file in template_dir.glob("template_rish_l*.mif"):
         l = int(rish_file.stem.split("_l")[1])
         template_rish[l] = str(rish_file)
-    
+
     if not template_rish:
         print(f"Error: No template RISH files found in {template_dir}")
         sys.exit(1)
-    
+
     lmax = max(template_rish.keys())
     print(f"  Found template with lmax={lmax}")
-    
+
     # Extract target RISH
     print("Extracting target RISH features...")
     target_rish_dir = output_dir / "target_rish"
@@ -403,20 +476,48 @@ def cmd_harmonize(args):
         mask=args.mask,
         n_threads=args.nthreads
     )
-    
+
+    # Check for covariate model in template directory
+    covariate_model_path = template_dir / "covariate_model" / "covariate_model.json"
+    rish_for_scale = target_rish
+
+    if covariate_model_path.exists():
+        from ..core.covariates import load_covariate_model, adjust_rish_features
+
+        model = load_covariate_model(str(covariate_model_path))
+        print(f"  Loaded covariate model ({', '.join(model.covariate_names)})")
+
+        # Parse target subject covariates
+        subject_covs = _parse_target_covariates(args, model.covariate_names)
+
+        if subject_covs:
+            print(f"  Adjusting target RISH for covariates...")
+            adjusted_dir = output_dir / "target_rish_adjusted"
+            adjusted_rish = adjust_rish_features(
+                target_rish, subject_covs, model,
+                str(adjusted_dir), mask_path=args.mask
+            )
+            rish_for_scale = adjusted_rish
+        else:
+            print(
+                "  Warning: Covariate model found but no subject covariates "
+                "provided. Use --subject-covariates or --participants + "
+                "--subject-id. Proceeding without adjustment."
+            )
+
     # Compute scale maps
     print("Computing scale maps...")
     scale_dir = output_dir / "scale_maps"
     scale_maps = compute_scale_maps(
         template_rish,
-        target_rish,
+        rish_for_scale,
         str(scale_dir),
         mask=args.mask,
         smoothing_fwhm=args.smoothing_fwhm,
         n_threads=args.nthreads
     )
-    
-    # Apply harmonization
+
+    # Apply harmonization to ORIGINAL target SH (not adjusted)
     print("Applying harmonization...")
     harmonized = output_dir / "sh_harmonized.mif"
     harmonize_sh(
@@ -426,8 +527,58 @@ def cmd_harmonize(args):
         lmax=lmax,
         n_threads=args.nthreads
     )
-    
+
     print(f"✓ Harmonized output: {harmonized}")
+
+
+def _parse_target_covariates(args, covariate_names):
+    """Parse target subject covariates from CLI args.
+
+    Supports two modes:
+    1. --subject-covariates "age=35,sex=M"
+    2. --participants file.tsv --subject-id sub-01
+
+    Returns
+    -------
+    dict or None
+        covariate_name -> raw value, or None if not provided
+    """
+    from ..io.participants import _encode_categorical
+
+    if args.subject_covariates:
+        # Parse "age=35,sex=M" format
+        covs = {}
+        for pair in args.subject_covariates.split(","):
+            key, val = pair.strip().split("=", 1)
+            key = key.strip()
+            val = val.strip()
+
+            # Try numeric first
+            try:
+                covs[key] = float(val)
+            except ValueError:
+                # Categorical: encode sex M/F
+                covs[key] = _encode_categorical([val])[0]
+
+        return covs
+
+    if args.participants and args.subject_id:
+        from ..io.participants import load_participants_tsv, load_participants_csv
+
+        if args.participants.endswith(".tsv"):
+            data = load_participants_tsv(
+                args.participants, covariate_names,
+                subject_ids=[args.subject_id]
+            )
+        else:
+            data = load_participants_csv(
+                args.participants, covariate_names,
+                subject_ids=[args.subject_id]
+            )
+
+        return {name: vals[0] for name, vals in data.covariates.items()}
+
+    return None
 
 
 def cmd_extract_rish(args):
