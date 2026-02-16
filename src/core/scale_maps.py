@@ -105,8 +105,9 @@ def compute_scale_maps(
                     "-force"
                 ] + thread_opt)
                 ratio = masked
-            
+
             # Step 4: Smooth if requested
+            # Use smooth(ratio*mask) / smooth(mask) to correct for boundary effects
             if smoothing_fwhm > 0:
                 smoothed = tmpdir / f"ratio_l{l}_smooth.mif"
                 # Convert FWHM to stdev: sigma = FWHM / (2 * sqrt(2 * ln(2))) ≈ FWHM / 2.355
@@ -117,7 +118,29 @@ def compute_scale_maps(
                     str(smoothed),
                     "-force"
                 ] + thread_opt)
-                ratio = smoothed
+
+                if mask:
+                    # Correct for boundary effects: divide by smoothed mask
+                    smoothed_mask = tmpdir / f"mask_l{l}_smooth.mif"
+                    run_mrtrix_cmd([
+                        "mrfilter", mask,
+                        "smooth", "-stdev", str(sigma),
+                        str(smoothed_mask),
+                        "-force"
+                    ] + thread_opt)
+
+                    corrected = tmpdir / f"ratio_l{l}_corrected.mif"
+                    # Where smoothed_mask > 0.1, divide; else set to 0
+                    run_mrtrix_cmd([
+                        "mrcalc", str(smoothed), str(smoothed_mask),
+                        "0.1", "-max", "-div",
+                        str(mask), "-mult",
+                        str(corrected),
+                        "-force"
+                    ] + thread_opt)
+                    ratio = corrected
+                else:
+                    ratio = smoothed
             
             # Step 5: Clip to reasonable range
             clipped = tmpdir / f"ratio_l{l}_clipped.mif"
