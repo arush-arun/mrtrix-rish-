@@ -1,0 +1,16 @@
+subject,site,fod_path
+sub-cIIs00_ses-s1Ax1,s1A,/home/uqahonne/uq/nif/mrtrix-rish/examples/ds003416/processing/sub-cIIs00/ses-s1Ax1/fod_reg.mif
+sub-cIIs01_ses-s1Ax1,s1A,/home/uqahonne/uq/nif/mrtrix-rish/examples/ds003416/processing/sub-cIIs01/ses-s1Ax1/fod_reg.mif
+sub-cIIs02_ses-s1Ax1,s1A,/home/uqahonne/uq/nif/mrtrix-rish/examples/ds003416/processing/sub-cIIs02/ses-s1Ax1/fod_reg.mif
+sub-cIIs03_ses-s1Ax1,s1A,/home/uqahonne/uq/nif/mrtrix-rish/examples/ds003416/processing/sub-cIIs03/ses-s1Ax1/fod_reg.mif
+sub-cIIs04_ses-s1Ax1,s1A,/home/uqahonne/uq/nif/mrtrix-rish/examples/ds003416/processing/sub-cIIs04/ses-s1Ax1/fod_reg.mif
+sub-cIIs00_ses-s1Bx1,s1B,/home/uqahonne/uq/nif/mrtrix-rish/examples/ds003416/processing/sub-cIIs00/ses-s1Bx1/fod_reg.mif
+sub-cIIs01_ses-s1Bx1,s1B,/home/uqahonne/uq/nif/mrtrix-rish/examples/ds003416/processing/sub-cIIs01/ses-s1Bx1/fod_reg.mif
+sub-cIIs02_ses-s1Bx1,s1B,/home/uqahonne/uq/nif/mrtrix-rish/examples/ds003416/processing/sub-cIIs02/ses-s1Bx1/fod_reg.mif
+sub-cIIs03_ses-s1Bx1,s1B,/home/uqahonne/uq/nif/mrtrix-rish/examples/ds003416/processing/sub-cIIs03/ses-s1Bx1/fod_reg.mif
+sub-cIIs04_ses-s1Bx1,s1B,/home/uqahonne/uq/nif/mrtrix-rish/examples/ds003416/processing/sub-cIIs04/ses-s1Bx1/fod_reg.mif
+sub-cIIs00_ses-s3x1,s3,/home/uqahonne/uq/nif/mrtrix-rish/examples/ds003416/processing/sub-cIIs00/ses-s3x1/fod_reg.mif
+sub-cIIs01_ses-s3x1,s3,/home/uqahonne/uq/nif/mrtrix-rish/examples/ds003416/processing/sub-cIIs01/ses-s3x1/fod_reg.mif
+sub-cIIs02_ses-s3x1,s3,/home/uqahonne/uq/nif/mrtrix-rish/examples/ds003416/processing/sub-cIIs02/ses-s3x1/fod_reg.mif
+sub-cIIs03_ses-s3x1,s3,/home/uqahonne/uq/nif/mrtrix-rish/examples/ds003416/processing/sub-cIIs03/ses-s3x1/fod_reg.mif
+sub-cIIs04_ses-s3x1,s3,/home/uqahonne/uq/nif/mrtrix-rish/examples/ds003416/processing/sub-cIIs04/ses-s3x1/fod_reg.mif
