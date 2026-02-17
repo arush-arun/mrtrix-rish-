@@ -331,6 +331,64 @@ def create_parser() -> argparse.ArgumentParser:
         help="Use heteroscedastic (G-statistic) test"
     )
 
+    # rish-glm subcommand
+    glm_parser = subparsers.add_parser(
+        "rish-glm",
+        help="RISH-GLM harmonization (joint GLM for site + covariates)"
+    )
+    glm_parser.add_argument(
+        "--manifest", "-i",
+        required=True,
+        help="CSV with columns: subject,site,fod_path[,covariate columns...]"
+    )
+    glm_parser.add_argument(
+        "--reference-site", "-r",
+        required=True,
+        help="Name of the reference site"
+    )
+    glm_parser.add_argument(
+        "--mask", "-m",
+        required=True,
+        help="Brain mask in template space"
+    )
+    glm_parser.add_argument(
+        "--output", "-o",
+        required=True,
+        help="Output directory"
+    )
+    glm_parser.add_argument(
+        "--lmax", "-l",
+        type=int,
+        default=8,
+        help="Maximum SH order (default: 8)"
+    )
+    glm_parser.add_argument(
+        "--covariates", "-c",
+        help="Comma-separated covariate column names (e.g., age,sex)"
+    )
+    glm_parser.add_argument(
+        "--smoothing-fwhm",
+        type=float,
+        default=3.0,
+        help="Scale map smoothing FWHM in mm (default: 3.0)"
+    )
+    glm_parser.add_argument(
+        "--clip-range",
+        default="0.5,2.0",
+        help="Scale factor clipping range (default: 0.5,2.0)"
+    )
+    glm_parser.add_argument(
+        "--nthreads", "-n",
+        type=int,
+        default=4,
+        help="Number of threads (default: 4)"
+    )
+    glm_parser.add_argument(
+        "--harmonize",
+        action="store_true",
+        help="Apply harmonization to all target site subjects"
+    )
+
     return parser
 
 
@@ -697,6 +755,147 @@ def cmd_bids_list(args):
         print()
 
 
+def cmd_rish_glm(args):
+    """Handle rish-glm command."""
+    import csv
+    from ..core.rish_features import extract_rish_features
+    from ..core.rish_glm import (
+        fit_rish_glm,
+        compute_glm_scale_maps,
+    )
+    from ..core.harmonize import harmonize_sh
+    from ..io.participants import _encode_categorical
+
+    output_dir = Path(args.output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Parse manifest CSV
+    print(f"Reading manifest from {args.manifest}...")
+    subjects = []
+    site_labels = []
+    fod_paths = []
+    covariates = {}
+    covariate_names = []
+
+    if args.covariates:
+        covariate_names = [c.strip() for c in args.covariates.split(",")]
+        for name in covariate_names:
+            covariates[name] = []
+
+    with open(args.manifest, "r") as f:
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames or []
+
+        # Validate required columns
+        for col in ["subject", "site", "fod_path"]:
+            if col not in fieldnames:
+                print(f"Error: manifest must have '{col}' column")
+                sys.exit(1)
+
+        for row in reader:
+            subjects.append(row["subject"])
+            site_labels.append(row["site"])
+            fod_paths.append(row["fod_path"])
+
+            for name in covariate_names:
+                if name not in row:
+                    print(f"Error: covariate column '{name}' not found in manifest")
+                    sys.exit(1)
+                val = row[name]
+                try:
+                    covariates[name].append(float(val))
+                except ValueError:
+                    covariates[name].append(
+                        _encode_categorical([val])[0]
+                    )
+
+    unique_sites = sorted(set(site_labels))
+    n_subjects = len(subjects)
+
+    print(f"\nData summary:")
+    for site in unique_sites:
+        n = sum(1 for s in site_labels if s == site)
+        print(f"  {site}: {n} subjects")
+    if covariate_names:
+        print(f"  Covariates: {', '.join(covariate_names)}")
+    print(f"  Reference site: {args.reference_site}")
+
+    # Extract RISH features for all subjects
+    print(f"\nExtracting RISH features...")
+    all_rish = []
+    for i, fod_path in enumerate(fod_paths):
+        subj_dir = output_dir / "rish" / subjects[i]
+        print(f"  [{i+1}/{n_subjects}] {subjects[i]}...")
+        rish = extract_rish_features(
+            fod_path,
+            str(subj_dir),
+            lmax=args.lmax,
+            mask=args.mask,
+            n_threads=args.nthreads,
+        )
+        all_rish.append(rish)
+
+    # Organize RISH by order
+    orders = sorted(all_rish[0].keys())
+    rish_by_order = {
+        l: [all_rish[i][l] for i in range(n_subjects)]
+        for l in orders
+    }
+
+    # Fit RISH-GLM
+    print(f"\nFitting RISH-GLM...")
+    result = fit_rish_glm(
+        rish_by_order,
+        site_labels,
+        mask_path=args.mask,
+        output_dir=str(output_dir),
+        reference_site=args.reference_site,
+        covariates=covariates if covariates else None,
+    )
+
+    print(f"  Model fitted with {len(result.design_columns)} columns: "
+          f"{', '.join(result.design_columns)}")
+
+    # Compute scale maps for each target site
+    clip_range = tuple(float(x) for x in args.clip_range.split(","))
+    target_sites = [s for s in unique_sites if s != args.reference_site]
+
+    for target in target_sites:
+        print(f"\nComputing scale maps for {target}...")
+        scale_dir = output_dir / "scale_maps" / target
+        scale_maps = compute_glm_scale_maps(
+            result,
+            target,
+            str(scale_dir),
+            mask=args.mask,
+            smoothing_fwhm=args.smoothing_fwhm,
+            clip_range=clip_range,
+            n_threads=args.nthreads,
+        )
+        print(f"  Created {len(scale_maps)} scale maps")
+
+        # Apply harmonization if requested
+        if args.harmonize:
+            print(f"  Harmonizing {target} subjects...")
+            harm_dir = output_dir / "harmonized" / target
+            harm_dir.mkdir(parents=True, exist_ok=True)
+
+            for i, (subj, site) in enumerate(zip(subjects, site_labels)):
+                if site != target:
+                    continue
+                out_path = harm_dir / f"{subj}_harmonized.mif"
+                harmonize_sh(
+                    fod_paths[i],
+                    scale_maps,
+                    str(out_path),
+                    lmax=args.lmax,
+                    n_threads=args.nthreads,
+                )
+                print(f"    {subj} -> {out_path}")
+
+    print(f"\n✓ RISH-GLM complete. Output: {output_dir}")
+
+
 def cmd_site_effect(args):
     """Handle site-effect command."""
     import csv
@@ -816,6 +1015,7 @@ def main():
         "bids-list": cmd_bids_list,
         "qc": cmd_qc,
         "site-effect": cmd_site_effect,
+        "rish-glm": cmd_rish_glm,
     }
     
     handler = handlers.get(args.command)
